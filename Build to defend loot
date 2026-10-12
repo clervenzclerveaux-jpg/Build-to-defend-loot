@@ -1,0 +1,259 @@
+--====================================================
+-- BUILD TO DEFEND LOOT
+-- R15 | ROBLOX STUDIO
+-- Place in StarterPlayer > StarterPlayerScripts
+--====================================================
+
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local enabled = {
+    Noclip = false,
+    InfiniteJump = false,
+    RatsESP = false,
+    PoopESP = false,
+    Speed = false
+}
+
+local walkSpeed = 32
+local savedCollision = {}
+local espObjects = {}
+
+-- GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "BuildToDefendLoot"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 290, 0, 440)
+frame.Position = UDim2.new(0.5, -145, 0.5, -220)
+frame.BackgroundColor3 = Color3.fromRGB(25, 35, 25)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 12)
+corner.Parent = frame
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 48)
+title.BackgroundColor3 = Color3.fromRGB(40, 110, 40)
+title.Text = "BUILD TO DEFEND LOOT"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.TextScaled = true
+title.Font = Enum.Font.GothamBold
+title.Parent = frame
+
+local list = Instance.new("ScrollingFrame")
+list.Position = UDim2.new(0, 10, 0, 58)
+list.Size = UDim2.new(1, -20, 1, -68)
+list.BackgroundTransparency = 1
+list.BorderSizePixel = 0
+list.ScrollBarThickness = 5
+list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+list.CanvasSize = UDim2.new()
+list.Parent = frame
+
+local layout = Instance.new("UIListLayout")
+layout.Padding = UDim.new(0, 8)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Parent = list
+
+local function makeButton(text, callback)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, -5, 0, 42)
+    button.BackgroundColor3 = Color3.fromRGB(45, 75, 45)
+    button.TextColor3 = Color3.new(1, 1, 1)
+    button.Text = text
+    button.TextScaled = true
+    button.Font = Enum.Font.GothamBold
+    button.Parent = list
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 8)
+    c.Parent = button
+
+    button.Activated:Connect(function()
+        callback(button)
+    end)
+
+    return button
+end
+
+local function toggleButton(label, key)
+    local button
+    button = makeButton(label .. ": OFF", function()
+        enabled[key] = not enabled[key]
+        button.Text = label .. (enabled[key] and ": ON" or ": OFF")
+        button.BackgroundColor3 = enabled[key]
+            and Color3.fromRGB(50, 150, 50)
+            or Color3.fromRGB(45, 75, 45)
+    end)
+end
+
+-- NOCLIP
+toggleButton("NOCLIP", "Noclip")
+
+-- SPEED INPUT
+local speedBox = Instance.new("TextBox")
+speedBox.Size = UDim2.new(1, -5, 0, 42)
+speedBox.BackgroundColor3 = Color3.fromRGB(35, 45, 35)
+speedBox.TextColor3 = Color3.new(1, 1, 1)
+speedBox.PlaceholderText = "Walk speed (1-900)"
+speedBox.Text = tostring(walkSpeed)
+speedBox.TextScaled = true
+speedBox.ClearTextOnFocus = false
+speedBox.Parent = list
+
+makeButton("SET SPEED", function()
+    local value = tonumber(speedBox.Text)
+    if value then
+        walkSpeed = math.clamp(value, 1, 900)
+        enabled.Speed = true
+    end
+end)
+
+toggleButton("INFINITE JUMP", "InfiniteJump")
+toggleButton("RATS ESP", "RatsESP")
+toggleButton("IN THE HEAD POOP ESP", "PoopESP")
+
+-- CHARACTER HELPERS
+local function getCharacter()
+    return player.Character
+end
+
+local function getHumanoid()
+    local character = getCharacter()
+    return character and character:FindFirstChildOfClass("Humanoid")
+end
+
+-- NOCLIP + SPEED
+RunService.Stepped:Connect(function()
+    local character = getCharacter()
+    if not character then return end
+
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            if enabled.Noclip then
+                if savedCollision[part] == nil then
+                    savedCollision[part] = part.CanCollide
+                end
+                part.CanCollide = false
+            elseif savedCollision[part] ~= nil then
+                part.CanCollide = savedCollision[part]
+                savedCollision[part] = nil
+            end
+        end
+    end
+
+    local humanoid = getHumanoid()
+    if humanoid and enabled.Speed then
+        humanoid.WalkSpeed = walkSpeed
+    end
+end)
+
+-- INFINITE JUMP
+UIS.JumpRequest:Connect(function()
+    if enabled.InfiniteJump then
+        local humanoid = getHumanoid()
+        if humanoid then
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
+end)
+
+-- ESP CLEANUP
+local function clearESP(target)
+    local objects = espObjects[target]
+    if objects then
+        for _, object in ipairs(objects) do
+            if object and object.Parent then
+                object:Destroy()
+            end
+        end
+        espObjects[target] = nil
+    end
+end
+
+-- ESP UPDATE
+local function updateESP()
+    for _, target in ipairs(Players:GetPlayers()) do
+        if target ~= player then
+            local character = target.Character
+            if not character then
+                clearESP(target)
+                continue
+            end
+
+            local wantsRats = enabled.RatsESP
+            local wantsPoop = enabled.PoopESP
+
+            if not wantsRats and not wantsPoop then
+                clearESP(target)
+                continue
+            end
+
+            clearESP(target)
+            local objects = {}
+            espObjects[target] = objects
+
+            if wantsRats then
+                local highlight = Instance.new("Highlight")
+                highlight.Name = "RatsESP"
+                highlight.FillColor = Color3.fromRGB(80, 255, 80)
+                highlight.OutlineColor = Color3.new(1, 1, 1)
+                highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                highlight.Parent = character
+                table.insert(objects, highlight)
+            end
+
+            if wantsPoop then
+                local head = character:FindFirstChild("Head")
+                if head then
+                    local billboard = Instance.new("BillboardGui")
+                    billboard.Name = "PoopESP"
+                    billboard.Size = UDim2.new(0, 120, 0, 35)
+                    billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+                    billboard.AlwaysOnTop = true
+                    billboard.Adornee = head
+                    billboard.Parent = character
+
+                    local label = Instance.new("TextLabel")
+                    label.Size = UDim2.fromScale(1, 1)
+                    label.BackgroundTransparency = 1
+                    label.Text = "💩 IN THE HEAD"
+                    label.TextScaled = true
+                    label.Font = Enum.Font.GothamBold
+                    label.TextColor3 = Color3.fromRGB(255, 220, 70)
+                    label.Parent = billboard
+
+                    table.insert(objects, billboard)
+                end
+            end
+        end
+    end
+end
+
+local timer = 0
+RunService.Heartbeat:Connect(function(dt)
+    timer += dt
+    if timer >= 0.5 then
+        timer = 0
+        updateESP()
+    end
+end)
+
+Players.PlayerRemoving:Connect(clearESP)
+
+player.CharacterAdded:Connect(function()
+    savedCollision = {}
+    task.wait(1)
+    updateESP()
+end)
+
+print("BUILD TO DEFEND LOOT loaded!")
